@@ -119,7 +119,195 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
     import {
       getFirestore,
       collection,
+      getDocs,
+      deleteDoc,
+      doc
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+    // dieselbe Firebase-Konfiguration wie in index.html
+    const firebaseConfig = {
+      apiKey: "AIzaSyAG-DW4i2R00Wg8aVC0n9GeLsg_OE21HUM",
+      authDomain: "jaquelines-weihnachtsquiz.firebaseapp.com",
+      projectId: "jaquelines-weihnachtsquiz",
+      storageBucket: "jaquelines-weihnachtsquiz.firebasestorage.app",
+      messagingSenderId: "404033018596",
+      appId: "1:404033018596:web:ff1f73fd74e0c4ee386af1",
+      measurementId: "G-DJTMTF14LX"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const RESULTS_COLLECTION = "quizResults";
+
+    const quizData = [
+      {
+        question:
+          "Welche Figur bringt in vielen Teilen der Schweiz am 6. Dezember die Geschenke?",
+        answers: ["Christkind", "Samichlaus", "Osterhase", "Schneemann"],
+        correctIndex: 1
+      },
+      {
+        question:
+          "Welches dieser Weihnachtsgebäcke ist in der Schweiz besonders typisch?",
+        answers: ["Gipfeli", "Mailänderli", "Berliner", "Croissant"],
+        correctIndex: 1
+      },
+      {
+        question:
+          "Welche Farbe wird am häufigsten mit Weihnachten in Verbindung gebracht?",
+        answers: ["Blau", "Gelb", "Rot", "Schwarz"],
+        correctIndex: 2
+      },
+      {
+        question: "In welchem Monat feiern wir Weihnachten?",
+        answers: ["Oktober", "November", "Dezember", "Januar"],
+        correctIndex: 2
+      }
+    ];
+
+    const summaryEl = document.getElementById("summary");
+    const tbodyEl = document.getElementById("resultsTableBody");
+    const noDataEl = document.getElementById("noData");
+
+    async function loadResults() {
+      const snapshot = await getDocs(collection(db, RESULTS_COLLECTION));
+      const arr = [];
+      snapshot.forEach((docSnap) => {
+        arr.push({
+          firestoreId: docSnap.id,
+          ...docSnap.data()
+        });
+      });
+      return arr;
+    }
+
+    function renderSummary(results) {
+      if (!results.length) {
+        summaryEl.innerHTML = "";
+        return;
+      }
+
+      const total = results.length;
+      const maxScore = Math.max(...results.map((r) => r.score || 0));
+      const sumScore = results.reduce((acc, r) => acc + (r.score || 0), 0);
+      const avgScore = (sumScore / total).toFixed(2);
+      const maxPossible = results[0]?.totalQuestions || quizData.length;
+
+      summaryEl.innerHTML = `
+        <div class="summary-item"><strong>Teilnehmer insgesamt:</strong> ${total}</div>
+        <div class="summary-item"><strong>Max. mögliche Punkte:</strong> ${maxPossible}</div>
+        <div class="summary-item"><strong>Beste Punktzahl:</strong> ${maxScore} / ${maxPossible}</div>
+        <div class="summary-item"><strong>Durchschnittliche Punkte:</strong> ${avgScore} / ${maxPossible}</div>
+      `;
+    }
+
+    function renderTable(results) {
+      tbodyEl.innerHTML = "";
+      if (!results.length) {
+        noDataEl.style.display = "block";
+        return;
+      }
+      noDataEl.style.display = "none";
+
+      results.forEach((res, idx) => {
+        const tr = document.createElement("tr");
+
+        const name =
+          res.participant && res.participant.firstName && res.participant.lastName
+            ? res.participant.firstName + " " + res.participant.lastName
+            : "Unbekannt";
+
+        const tdIndex = document.createElement("td");
+        tdIndex.textContent = idx + 1;
+
+        const tdName = document.createElement("td");
+        tdName.textContent = name;
+
+        const tdAddress = document.createElement("td");
+        tdAddress.textContent = res.participant?.address || "-";
+
+        const tdEmail = document.createElement("td");
+        tdEmail.textContent = res.participant?.email || "-";
+
+        const tdScore = document.createElement("td");
+        tdScore.textContent = `${res.score} / ${res.totalQuestions}`;
+
+        const tdAction = document.createElement("td");
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.textContent = "Löschen";
+        deleteBtn.addEventListener("click", () => deleteResult(res.firestoreId));
+        tdAction.appendChild(deleteBtn);
+
+        const tdDetails = document.createElement("td");
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Antworten anzeigen";
+        details.appendChild(summary);
+
+        const list = document.createElement("ul");
+        list.style.paddingLeft = "1rem";
+
+        (res.answers || []).forEach((a, qIdx) => {
+          const q = quizData[a.questionIndex] || quizData[qIdx];
+          const li = document.createElement("li");
+          const questionText = q ? q.question : `Frage ${qIdx + 1}`;
+          const selectedText =
+            a.selectedIndex !== null && a.selectedIndex !== undefined && q
+              ? q.answers[a.selectedIndex]
+              : "Keine Antwort";
+          const correctText = q ? q.answers[a.correctIndex] : "-";
+          const correctFlag = a.wasCorrect ? "✔" : "✘";
+
+          li.textContent = `Frage ${qIdx + 1}: ${questionText} | Angekreuzt: "${selectedText}" | Richtig: "${correctText}" (${correctFlag})`;
+          list.appendChild(li);
+        });
+
+        details.appendChild(list);
+        tdDetails.appendChild(details);
+
+        tr.appendChild(tdIndex);
+        tr.appendChild(tdName);
+        tr.appendChild(tdAddress);
+        tr.appendChild(tdEmail);
+        tr.appendChild(tdScore);
+        tr.appendChild(tdAction);
+        tr.appendChild(tdDetails);
+
+        tbodyEl.appendChild(tr);
+      });
+    }
+
+    async function deleteResult(firestoreId) {
+      if (!confirm("Dieses Ergebnis wirklich löschen?")) return;
+      try {
+        await deleteDoc(doc(db, RESULTS_COLLECTION, firestoreId));
+        await init(); // Liste neu laden
+      } catch (e) {
+        console.error("Fehler beim Löschen:", e);
+        alert("Fehler beim Löschen des Ergebnisses.");
+      }
+    }
+
+    async function init() {
+      try {
+        const results = await loadResults();
+        renderSummary(results);
+        renderTable(results);
+      } catch (e) {
+        console.error("Fehler beim Laden der Ergebnisse:", e);
+        summaryEl.innerHTML =
+          "<div class='summary-item'>Fehler beim Laden der Daten aus Firestore.</div>";
+        noDataEl.style.display = "block";
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
