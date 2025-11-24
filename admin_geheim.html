@@ -89,8 +89,9 @@
   <div class="container">
     <h1>Admin – Jaquelines Weihnachtsquiz 🎄</h1>
     <p class="small">
-      Hinweis: Die Daten werden im <strong>localStorage</strong> dieses Browsers gespeichert.
-      Du siehst hier nur Teilnehmer, die auf diesem Gerät gespielt haben.
+      Hinweis: Die Daten werden in <strong>Cloud Firestore</strong> gespeichert.
+      Du siehst hier alle Teilnehmer, egal von welchem Gerät sie gespielt haben
+      (sofern sie dieselbe Firebase-Datenbank verwenden).
     </p>
 
     <div id="summary" class="summary-box"></div>
@@ -100,7 +101,7 @@
         <tr>
           <th>#</th>
           <th>Name</th>
-          <th>Adresse</th>
+          <th>Wohnadresse</th>
           <th>E-Mail</th>
           <th>Punkte</th>
           <th>Aktion</th>
@@ -117,173 +118,8 @@
     </div>
   </div>
 
-  <script>
-    const QUIZ_STORAGE_KEY_ALL = "xmasQuizResults_v1";
-
-    const quizData = [
-      {
-        question:
-          "Welche Figur bringt in vielen Teilen der Schweiz am 6. Dezember die Geschenke?",
-        answers: ["Christkind", "Samichlaus", "Osterhase", "Schneemann"],
-        correctIndex: 1
-      },
-      {
-        question:
-          "Welches dieser Weihnachtsgebäcke ist in der Schweiz besonders typisch?",
-        answers: ["Gipfeli", "Mailänderli", "Berliner", "Croissant"],
-        correctIndex: 1
-      },
-      {
-        question:
-          "Welche Farbe wird am häufigsten mit Weihnachten in Verbindung gebracht?",
-        answers: ["Blau", "Gelb", "Rot", "Schwarz"],
-        correctIndex: 2
-      },
-      {
-        question: "In welchem Monat feiern wir Weihnachten?",
-        answers: ["Oktober", "November", "Dezember", "Januar"],
-        correctIndex: 2
-      }
-    ];
-
-    const summaryEl = document.getElementById("summary");
-    const tbodyEl = document.getElementById("resultsTableBody");
-    const noDataEl = document.getElementById("noData");
-
-    function loadResults() {
-      let raw = localStorage.getItem(QUIZ_STORAGE_KEY_ALL);
-      if (!raw) return [];
-      try {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) {
-        console.error("Fehler beim Lesen der Ergebnisse:", e);
-      }
-      return [];
-    }
-
-    function saveResults(results) {
-      try {
-        localStorage.setItem(QUIZ_STORAGE_KEY_ALL, JSON.stringify(results));
-      } catch (e) {
-        console.error("Fehler beim Speichern der Ergebnisse:", e);
-      }
-    }
-
-    function renderSummary(results) {
-      if (!results.length) {
-        summaryEl.innerHTML = "";
-        return;
-      }
-
-      const total = results.length;
-      const maxScore = Math.max(...results.map((r) => r.score || 0));
-      const sumScore = results.reduce((acc, r) => acc + (r.score || 0), 0);
-      const avgScore = (sumScore / total).toFixed(2);
-      const maxPossible = results[0]?.totalQuestions || quizData.length;
-
-      summaryEl.innerHTML = `
-        <div class="summary-item"><strong>Teilnehmer insgesamt:</strong> ${total}</div>
-        <div class="summary-item"><strong>Max. mögliche Punkte:</strong> ${maxPossible}</div>
-        <div class="summary-item"><strong>Beste Punktzahl:</strong> ${maxScore} / ${maxPossible}</div>
-        <div class="summary-item"><strong>Durchschnittliche Punkte:</strong> ${avgScore} / ${maxPossible}</div>
-      `;
-    }
-
-    function renderTable(results) {
-      tbodyEl.innerHTML = "";
-      if (!results.length) {
-        noDataEl.style.display = "block";
-        return;
-      }
-      noDataEl.style.display = "none";
-
-      results.forEach((res, idx) => {
-        const tr = document.createElement("tr");
-
-        const name =
-          res.participant && res.participant.firstName && res.participant.lastName
-            ? res.participant.firstName + " " + res.participant.lastName
-            : "Unbekannt";
-
-        const tdIndex = document.createElement("td");
-        tdIndex.textContent = idx + 1;
-
-        const tdName = document.createElement("td");
-        tdName.textContent = name;
-
-        const tdAddress = document.createElement("td");
-        tdAddress.textContent = res.participant?.address || "-";
-
-        const tdEmail = document.createElement("td");
-        tdEmail.textContent = res.participant?.email || "-";
-
-        const tdScore = document.createElement("td");
-        tdScore.textContent = `${res.score} / ${res.totalQuestions}`;
-
-        const tdAction = document.createElement("td");
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.className = "delete-btn";
-        deleteBtn.textContent = "Löschen";
-        deleteBtn.addEventListener("click", () => deleteResult(res.id));
-        tdAction.appendChild(deleteBtn);
-
-        const tdDetails = document.createElement("td");
-        const details = document.createElement("details");
-        const summary = document.createElement("summary");
-        summary.textContent = "Antworten anzeigen";
-        details.appendChild(summary);
-
-        const list = document.createElement("ul");
-        list.style.paddingLeft = "1rem";
-
-        (res.answers || []).forEach((a, qIdx) => {
-          const q = quizData[a.questionIndex] || quizData[qIdx];
-          const li = document.createElement("li");
-          const questionText = q ? q.question : `Frage ${qIdx + 1}`;
-          const selectedText =
-            a.selectedIndex !== null && a.selectedIndex !== undefined && q
-              ? q.answers[a.selectedIndex]
-              : "Keine Antwort";
-          const correctText = q ? q.answers[a.correctIndex] : "-";
-          const correctFlag = a.wasCorrect ? "✔" : "✘";
-
-          li.textContent = `Frage ${qIdx + 1}: ${questionText} | Angekreuzt: "${selectedText}" | Richtig: "${correctText}" (${correctFlag})`;
-          list.appendChild(li);
-        });
-
-        details.appendChild(list);
-        tdDetails.appendChild(details);
-
-        tr.appendChild(tdIndex);
-        tr.appendChild(tdName);
-        tr.appendChild(tdAddress);
-        tr.appendChild(tdEmail);
-        tr.appendChild(tdScore);
-        tr.appendChild(tdAction);
-        tr.appendChild(tdDetails);
-
-        tbodyEl.appendChild(tr);
-      });
-    }
-
-    function deleteResult(id) {
-      if (!confirm("Dieses Ergebnis wirklich löschen?")) return;
-      const results = loadResults();
-      const newResults = results.filter((r) => r.id !== id);
-      saveResults(newResults);
-      renderSummary(newResults);
-      renderTable(newResults);
-    }
-
-    function init() {
-      const results = loadResults();
-      renderSummary(results);
-      renderTable(results);
-    }
-
-    init();
-  </script>
-</body>
-</html>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
