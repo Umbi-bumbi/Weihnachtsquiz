@@ -123,6 +123,8 @@
   </div>
 
   <script type="module">
+    console.log("Admin-Seite Script gestartet");
+
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
     import {
       getFirestore,
@@ -147,7 +149,9 @@
     const db = getFirestore(app);
     const RESULTS_COLLECTION = "quizResults";
 
-    // Muss mit index.html / results.html übereinstimmen
+    console.log("Firebase initialisiert, Hole Daten aus Collection:", RESULTS_COLLECTION);
+
+    // Muss mit index.html übereinstimmen
     const quizData = [
       {
         question: "Wieviele Rentiere hat der Weihnachtsmann an seinem Schlitten gespannt?",
@@ -277,6 +281,7 @@
     const noDataEl = document.getElementById("noData");
 
     async function loadResults() {
+      console.log("loadResults() aufgerufen");
       const snapshot = await getDocs(collection(db, RESULTS_COLLECTION));
       const arr = [];
       snapshot.forEach((docSnap) => {
@@ -285,7 +290,8 @@
           ...docSnap.data()
         });
       });
-      // optional: nach Score sortieren (beste zuerst)
+      console.log("Anzahl Ergebnisse aus Firestore:", arr.length, arr);
+      // nach Score sortieren (beste zuerst)
       arr.sort((a, b) => (b.score || 0) - (a.score || 0));
       return arr;
     }
@@ -293,3 +299,146 @@
     function renderSummary(results) {
       if (!results.length) {
         summaryEl.innerHTML = "";
+        return;
+      }
+
+      const total = results.length;
+      const maxScore = Math.max(...results.map((r) => r.score || 0));
+      const sumScore = results.reduce((acc, r) => acc + (r.score || 0), 0);
+      const avgScore = (sumScore / total).toFixed(2);
+      const maxPossible = results[0]?.totalQuestions || quizData.length;
+
+      summaryEl.innerHTML = `
+        <div class="summary-item"><strong>Teilnehmer insgesamt:</strong> ${total}</div>
+        <div class="summary-item"><strong>Max. mögliche Punkte:</strong> ${maxPossible}</div>
+        <div class="summary-item"><strong>Beste Punktzahl:</strong> ${maxScore} / ${maxPossible}</div>
+        <div class="summary-item"><strong>Durchschnittliche Punkte:</strong> ${avgScore} / ${maxPossible}</div>
+      `;
+    }
+
+    function renderTable(results) {
+      tbodyEl.innerHTML = "";
+      if (!results.length) {
+        noDataEl.style.display = "block";
+        return;
+      }
+      noDataEl.style.display = "none";
+
+      results.forEach((res, idx) => {
+        const tr = document.createElement("tr");
+
+        const name =
+          res.participant && res.participant.firstName && res.participant.lastName
+            ? res.participant.firstName + " " + res.participant.lastName
+            : "Unbekannt";
+
+        const tdIndex = document.createElement("td");
+        tdIndex.textContent = idx + 1;
+
+        const tdName = document.createElement("td");
+        tdName.innerHTML = `${name}${
+          res.timestamp
+            ? `<div class="timestamp">${new Date(res.timestamp).toLocaleString()}</div>`
+            : ""
+        }`;
+
+        const tdAddress = document.createElement("td");
+        tdAddress.textContent = res.participant?.address || "-";
+
+        const tdEmail = document.createElement("td");
+        tdEmail.textContent = res.participant?.email || "-";
+
+        const tdScore = document.createElement("td");
+        tdScore.textContent = `${res.score} / ${res.totalQuestions}`;
+
+        const tdAction = document.createElement("td");
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.textContent = "Löschen";
+        deleteBtn.addEventListener("click", () => deleteResult(res.firestoreId));
+        tdAction.appendChild(deleteBtn);
+
+        const tdDetails = document.createElement("td");
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Antworten anzeigen";
+        details.appendChild(summary);
+
+        const list = document.createElement("ul");
+        list.style.paddingLeft = "1rem";
+
+        (res.answers || []).forEach((a, qIdx) => {
+          const q =
+            (typeof a.questionIndex === "number" && quizData[a.questionIndex]) ||
+            quizData[qIdx] ||
+            null;
+
+          const li = document.createElement("li");
+          const questionText = q ? q.question : `Frage ${qIdx + 1}`;
+
+          let selectedText = "Keine Antwort";
+          if (a.selectedIndex !== null && a.selectedIndex !== undefined && q && q.answers) {
+            if (q.answers[a.selectedIndex] !== undefined) {
+              selectedText = q.answers[a.selectedIndex];
+            }
+          }
+
+          let correctText = "–";
+          if (q && q.answers && a.correctIndex !== null && a.correctIndex !== undefined) {
+            if (q.answers[a.correctIndex] !== undefined) {
+              correctText = q.answers[a.correctIndex];
+            }
+          }
+
+          const correctFlag = a.wasCorrect ? "✔" : "✘";
+
+          li.textContent = `Frage ${qIdx + 1}: ${questionText} | Angekreuzt: "${selectedText}" | Richtig: "${correctText}" (${correctFlag})`;
+          list.appendChild(li);
+        });
+
+        details.appendChild(list);
+        tdDetails.appendChild(details);
+
+        tr.appendChild(tdIndex);
+        tr.appendChild(tdName);
+        tr.appendChild(tdAddress);
+        tr.appendChild(tdEmail);
+        tr.appendChild(tdScore);
+        tr.appendChild(tdAction);
+        tr.appendChild(tdDetails);
+
+        tbodyEl.appendChild(tr);
+      });
+    }
+
+    async function deleteResult(firestoreId) {
+      if (!confirm("Dieses Ergebnis wirklich löschen?")) return;
+      try {
+        await deleteDoc(doc(db, RESULTS_COLLECTION, firestoreId));
+        await init(); // Liste neu laden
+      } catch (e) {
+        console.error("Fehler beim Löschen:", e);
+        alert("Fehler beim Löschen des Ergebnisses.");
+      }
+    }
+
+    async function init() {
+      console.log("init() gestartet");
+      try {
+        const results = await loadResults();
+        console.log("init() – Ergebnisse angekommen:", results);
+        renderSummary(results);
+        renderTable(results);
+      } catch (e) {
+        console.error("Fehler beim Laden der Ergebnisse aus Firestore:", e);
+        summaryEl.innerHTML =
+          "<div class='summary-item'>Fehler beim Laden der Daten aus Firestore (Details in der Console).</div>";
+        noDataEl.style.display = "block";
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
