@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Jaquelines Weihnachtsquiz</title>
+  <title>Weihnachtsquiz</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * {
@@ -118,30 +118,11 @@
 </head>
 <body>
   <div class="container">
-    <h1>Jaquelines Weihnachtsquiz 🎄</h1>
+    <h1>Weihnachtsquiz 🎄</h1>
 
     <!-- REGISTRIERUNG -->
     <div id="registration">
-      <p>
-        Hallo liebe Leute, und herzlich willkommen zu Jaquelines Weihnachtsquiz.
-        Dieses Türchen öffnet sich dieses Jahr leider nur für einen von euch.
-        Die andern werden leer ausgehen. Der Gewinner des Weihnachtsquiz bekommt
-        nämlich ein Geschenk im Wert von 120 CHF zu Weihnachten zugesendet.
-      </p>
-      <p>
-        <strong>Regeln:</strong><br />
-        – Das Quiz besteht aus 4 Fragen rund um Weihnachten.<br />
-        – Zu jeder Frage gibt es 4 Antwortmöglichkeiten.<br />
-        – Für jede Frage hast du genau <strong>10 Sekunden</strong> Zeit. Wenn du
-        nicht rechtzeitig klickst, gilt die Frage als falsch beantwortet.<br />
-        – Nimm dir bitte etwa <strong>10 Minuten ungestört Zeit</strong>, bevor du
-        auf „Quiz starten“ klickst. Das Quiz läuft ohne Pause durch.
-      </p>
-      <p>
-        Wenn du bereit bist, fülle bitte zuerst die folgenden Felder aus und starte
-        dann das Quiz.
-      </p>
-
+      <p>Bitte gib deine Daten ein, bevor das Quiz startet.</p>
       <form id="regForm">
         <label>
           Vorname
@@ -152,7 +133,7 @@
           <input type="text" id="lastName" required />
         </label>
         <label>
-          Wohnadresse
+          Adresse
           <input type="text" id="address" required />
         </label>
         <label>
@@ -177,30 +158,8 @@
     </div>
   </div>
 
-  <!-- Firebase + Quiz-Logik -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      addDoc
-    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
-
-    // Deine Firebase-Konfiguration
-    const firebaseConfig = {
-      apiKey: "AIzaSyAG-DW4i2R00Wg8aVC0n9GeLsg_OE21HUM",
-      authDomain: "jaquelines-weihnachtsquiz.firebaseapp.com",
-      projectId: "jaquelines-weihnachtsquiz",
-      storageBucket: "jaquelines-weihnachtsquiz.firebasestorage.app",
-      messagingSenderId: "404033018596",
-      appId: "1:404033018596:web:ff1f73fd74e0c4ee386af1",
-      measurementId: "G-DJTMTF14LX"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const RESULTS_COLLECTION = "quizResults";
-
+  <script>
+    const QUIZ_STORAGE_KEY_ALL = "xmasQuizResults_v1";
     const QUIZ_STORAGE_KEY_LAST = "xmasQuizLastResult_v1";
 
     // 4 Weihnachts-Fragen, je 4 Antwortmöglichkeiten
@@ -286,7 +245,9 @@
         answersEl.appendChild(btn);
       });
 
-      progressEl.textContent = `Frage ${currentQuestionIndex + 1} von ${quizData.length}`;
+      progressEl.textContent = `Frage ${currentQuestionIndex + 1} von ${
+        quizData.length
+      }`;
 
       questionActive = true;
       startTimer();
@@ -340,7 +301,7 @@
       setTimeout(showQuestion, 200);
     }
 
-    async function finishQuiz() {
+    function finishQuiz() {
       const result = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
@@ -350,18 +311,23 @@
         answers: givenAnswers
       };
 
-      // Letztes Ergebnis lokal für die Teilnehmer-Resultatseite speichern
       try {
         localStorage.setItem(QUIZ_STORAGE_KEY_LAST, JSON.stringify(result));
       } catch (e) {
         console.error("Fehler beim Speichern des letzten Ergebnisses:", e);
       }
 
-      // Ergebnis in Firestore speichern (für Admin & mehrere Geräte)
       try {
-        await addDoc(collection(db, RESULTS_COLLECTION), result);
+        const existing = localStorage.getItem(QUIZ_STORAGE_KEY_ALL);
+        let arr = [];
+        if (existing) {
+          arr = JSON.parse(existing);
+          if (!Array.isArray(arr)) arr = [];
+        }
+        arr.push(result);
+        localStorage.setItem(QUIZ_STORAGE_KEY_ALL, JSON.stringify(arr));
       } catch (e) {
-        console.error("Fehler beim Speichern in Firestore:", e);
+        console.error("Fehler beim Speichern aller Ergebnisse:", e);
       }
 
       // Teilnehmer-Übersicht auf separater Seite
